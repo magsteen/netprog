@@ -1,6 +1,37 @@
 use std::env;
 use std::thread;
 
+//Finds and returns the primes in the given dataset.
+fn find_primes(data: Vec<u32>) -> Vec<u32> {
+    let mut primes = Vec::new();
+    for num in data {
+        if num < 2 {continue}
+        if num == 2 {
+            primes.push(num);
+            continue;
+        }
+        let num_f = num as f64;
+        let num_square = num_f.sqrt().ceil() as u32 + 1;
+        let mut is_prime: bool = true;
+        for i in 2..num_square {
+            if num % i == 0 {
+                is_prime = false;
+                break
+            }
+        }
+        if is_prime {primes.push(num)}
+    }
+
+    primes
+}
+
+//Returns all data points between given start and end, with a give stepsize
+fn find_thread_input(start:u32, end:u32, step:usize) -> Vec<u32> {
+    (start..=end)
+        .step_by(step)
+        .collect()
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("{:?}", args);
@@ -55,34 +86,3 @@ fn main() {
     all_primes.sort();
     println!("Final sorted result: {:?}", all_primes);
 }
-
-//Finds and returns the primes in the given dataset.
-fn find_primes(data: Vec<u32>) -> Vec<u32> {
-    let mut primes = Vec::new();
-    for num in data {
-        if num < 2 {continue}
-        if num == 2 {
-            primes.push(num);
-            continue;
-        }
-        let num_f = num as f64;
-        let num_square = num_f.sqrt().ceil() as u32 + 1;
-        let mut is_prime: bool = true;
-        for i in 2..num_square {
-            if num % i == 0 {
-                is_prime = false;
-                break
-            }
-        }
-        if is_prime {primes.push(num)}
-    }
-
-    primes
-}
-
-//Returns all data points between given start and end, with a give stepsize
-fn find_thread_input(start:u32, end:u32, step:usize) -> Vec<u32> {
-    (start..=end)
-        .step_by(step)
-        .collect()
-    }
