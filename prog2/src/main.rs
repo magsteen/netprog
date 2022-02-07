@@ -1,9 +1,11 @@
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
 use std::time::Duration;
-use std::{result, thread, time};
 
-#[derive(Debug)]
+struct Job {
+    job_func: JobFunc,
+    timeout: Duration,
+}
 struct Worker {
     thread: Option<thread::JoinHandle<()>>,
 }
@@ -25,17 +27,18 @@ impl<F: FnOnce()> FnBox for F {
         (*self)()
     }
 }
-type Job = Box<dyn FnBox + Send>;
+type JobFunc = Box<dyn FnBox + Send>;
 
 impl Worker {
     pub fn new(lock_pair: Arc<(Mutex<JobList>, Condvar)>) -> Worker {
         let t = std::thread::spawn(move || loop {
             let (lock, cvar) = &*lock_pair;
             let mut r_lock = lock.lock().unwrap();
-
             while r_lock.jobs.is_empty() && !r_lock.stop {
-                let result = cvar.wait_timeout(r_lock, Duration::from_millis(1)).unwrap();
-                r_lock = result.0;
+                r_lock = cvar
+                    .wait_timeout(r_lock, Duration::from_millis(10000))
+                    .unwrap()
+                    .0;
             }
 
             if r_lock.jobs.is_empty() && r_lock.stop {
@@ -46,8 +49,9 @@ impl Worker {
             let job = r_lock.jobs.pop().unwrap();
             r_lock.jobs = rem_jobs;
             drop(r_lock);
-
-            job.call_box();
+            println!("Job sleep");
+            thread::sleep(job.timeout);
+            job.job_func.call_box();
         });
         Worker { thread: Some(t) }
     }
@@ -83,20 +87,23 @@ impl WorkerPool {
         return true;
     }
 
-    /**
-     * Function sends the specified lambda job to a shared channel nad notifies the
-     * condition variable of the state change.
-     */
     fn post<F>(&mut self, f: F)
     where
         F: FnOnce() + Send + 'static,
     {
-        let job = Box::new(f);
+        self.post_timeout(f, Duration::from_millis(2000));
+    }
+
+    fn post_timeout<F>(&mut self, f: F, timeout: Duration)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job_func = Box::new(f);
+        let work = Job { job_func, timeout };
         let (lock, cvar) = &*self.lock_pair;
         let mut r_lock = lock.lock().unwrap();
-        r_lock.jobs.push(job);
+        r_lock.jobs.push(work);
         cvar.notify_one();
-        return;
     }
 
     /**
@@ -118,13 +125,6 @@ impl WorkerPool {
             }
         }
         return;
-    }
-
-    fn post_timeout() -> usize {
-        //TODO
-
-        //EXTRA: Add epoll for linux
-        return 0;
     }
 }
 
