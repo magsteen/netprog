@@ -42,8 +42,11 @@ impl Worker {
                 break;
             };
 
+            let rem_jobs: Vec<Job> = r_lock.jobs.drain(1..).collect();
             let job = r_lock.jobs.pop().unwrap();
+            r_lock.jobs = rem_jobs;
             drop(r_lock);
+
             job.call_box();
         });
         Worker { thread: Some(t) }
