@@ -1,12 +1,7 @@
+use async_std::{io, net::UdpSocket, task};
 use std::env;
 
-use async_std::io::BufReader;
-use async_std::prelude::*;
-use async_std::{io, net::TcpListener, net::TcpStream, task};
-
 const MATH_SERVER_ADDRESS: &str = "localhost:8080";
-const HTTP_SERVER_ADDRESS: &str = "localhost:8081";
-
 struct Expression {
     operand_left: f64,
     operand_right: f64,
@@ -16,7 +11,7 @@ struct Expression {
 fn main() {
     let args: Vec<String> = env::args().collect();
     match args[1].as_str() {
-        "-c" => start_math_client(),
+        "-c" => start_math_client(args[2].to_string()),
         "-s" => start_servers(),
         _ => panic!("A client/server argument must be specified (-c or -s)"),
     };
@@ -26,39 +21,24 @@ fn start_servers() {
     let mut handles = Vec::new();
 
     handles.push(std::thread::spawn(|| start_math_server()));
-    handles.push(std::thread::spawn(|| start_web_server()));
 
     for handle in handles {
         handle.join().unwrap();
     }
 }
 
-fn start_web_server() {
-    task::block_on(async_web_server()).unwrap();
-}
-
-async fn async_web_server() -> io::Result<()> {
-    let listener = TcpListener::bind(HTTP_SERVER_ADDRESS).await?;
-    let mut incoming = listener.incoming();
-    while let Some(stream) = incoming.next().await {
-        let stream = stream?;
-        task::spawn(handle_web_connection(stream));
-    }
-
-    Ok(())
-}
-
 fn start_math_server() {
     task::block_on(async_math_server()).unwrap();
 }
 
-fn start_math_client() {
-    task::block_on(async_math_client()).unwrap();
+fn start_math_client(addr: String) {
+    task::block_on(async_math_client(addr)).unwrap();
 }
 
-async fn async_math_client() -> io::Result<()> {
+async fn async_math_client(addr: String) -> io::Result<()> {
     println!("Starting MATH client...");
-    let mut stream = TcpStream::connect(MATH_SERVER_ADDRESS).await?;
+    let socket = UdpSocket::bind(addr).await?;
+    socket.connect(MATH_SERVER_ADDRESS).await?;
 
     loop {
         let mut input = String::new();
@@ -67,8 +47,8 @@ async fn async_math_client() -> io::Result<()> {
         println!("Please provide an expression to calculate (e.g: <number><operator><number>): ");
         io::stdin().read_line(&mut input).await?;
 
-        stream.write(input.as_bytes()).await?;
-        if stream.read(&mut output).await? == 0 {
+        socket.send(input.as_bytes()).await?;
+        if socket.recv(&mut output).await? == 0 {
             break;
         };
         let result = f64::from_be_bytes(output);
@@ -78,20 +58,11 @@ async fn async_math_client() -> io::Result<()> {
 }
 
 async fn async_math_server() -> io::Result<()> {
-    let listener = TcpListener::bind(MATH_SERVER_ADDRESS).await?;
-    let mut incoming = listener.incoming();
-    while let Some(stream) = incoming.next().await {
-        let stream = stream?;
-        task::spawn(handle_math_connection(stream));
-    }
+    let socket = UdpSocket::bind(MATH_SERVER_ADDRESS).await?;
 
-    Ok(())
-}
-
-async fn handle_math_connection(mut stream: TcpStream) -> io::Result<()> {
     loop {
         let mut data = [0; 1024];
-        let bytes = stream.read(&mut data).await?;
+        let (bytes, addr) = socket.recv_from(&mut data).await?;
         let byte_data = &data[..bytes - 1]; //Drop newline char at end of message
         let input = match std::str::from_utf8(&byte_data) {
             Ok(res) => res,
@@ -107,7 +78,7 @@ async fn handle_math_connection(mut stream: TcpStream) -> io::Result<()> {
             Ok(v) => {
                 match calculate(v) {
                     Ok(answer) => {
-                        stream.write(&answer.to_be_bytes()).await?;
+                        socket.send_to(&answer.to_be_bytes(), addr).await?;
                     }
                     Err(e) => println!("Server says: Calculation failed: {:?}", e),
                 };
@@ -115,7 +86,6 @@ async fn handle_math_connection(mut stream: TcpStream) -> io::Result<()> {
             Err(e) => println!("Server says: Error: {}", e),
         }
     }
-
     Ok(())
 }
 
@@ -161,57 +131,4 @@ fn get_op_index(expr: String) -> Result<usize, &'static str> {
         }
     }
     return Err("Operator not found in expression!");
-}
-
-async fn handle_web_connection(mut stream: TcpStream) -> io::Result<()> {
-    let mut buffer = [0; 1024];
-    let mut string_data = String::new();
-    let mut reader = BufReader::new(stream.clone());
-
-    let bytes = reader.read_line(&mut string_data).await?;
-    if bytes == 0 {
-        return Ok(());
-    };
-
-    reader.read(&mut buffer).await?;
-
-    let (status_line, html) = if string_data.eq("GET / HTTP/1.1\r\n") {
-        (
-            "HTTP/1.1 200 OK\r\n\r\n",
-            "<!DOCTYPE html>
-        <html lang='no'>
-          <head>
-            <meta charset='utf-8'>
-            <title>Calcumulator</title>
-          </head>
-          <body>
-            <h1>Hei og velkommen til min web-tjener</h1>
-            <p>Header fra klient gav følgende: </p>
-                <ul>"
-                .to_owned()
-                + &format_header_item_list(&buffer)
-                + "
-                </ul>
-          </body>
-        </html>
-        ",
-        )
-    } else {
-        ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "".to_owned())
-    };
-    println!("{}", std::str::from_utf8(&buffer).unwrap());
-    let response = format!("{status_line}{html}");
-    stream.write_all(response.as_bytes()).await?;
-    stream.flush().await?;
-    Ok(())
-}
-
-fn format_header_item_list(buf: &[u8; 1024]) -> String {
-    let mut result = "".to_owned();
-    std::str::from_utf8(buf)
-        .unwrap()
-        .split("\r\n")
-        .filter(|line| line.to_owned().trim().len() != 0)
-        .for_each(|line| result.push_str(format!("<li>{}</li>", line).as_str()));
-    return result;
 }
