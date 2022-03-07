@@ -1,17 +1,8 @@
 use actix_cors::Cors;
-use actix_web::{get, http, middleware::Logger, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware::Logger, App, HttpServer};
 use std::path::Path;
 
 mod controller;
-
-const HTTP_SERVER_ADDRESS: &str = "localhost:8080";
-
-// Listen for incomming http requests
-// Deserialize to json
-// Establish language used -> create container for compiling/executing this language
-// Send main.rs file as request to container for compilation and execution.
-// Recieve response from execution, or determine runtime error if taking to long.
-// Send response json to client.
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -34,7 +25,7 @@ async fn main() -> std::io::Result<()> {
             .service(controller::main_controller::index)
             .service(controller::comprun_controller::service())
     })
-    .bind(("0.0.0.0", 8080))? //or use address constant if possible?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }

@@ -1,15 +1,12 @@
+use actix_web::{post, web, Responder, Scope};
 use core::panic;
+use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Result,
     fs::File,
     io::Write,
-    path::Path,
     process::{Command, Output},
 };
 use uuid::Uuid;
-
-use actix_web::{post, services, web, Handler, HttpResponse, Responder, Scope};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct Program {
@@ -38,12 +35,17 @@ pub async fn comprun(program: web::Json<Program>) -> impl Responder {
 
     let output = run_image(image_name.to_string().as_str());
 
-    let result = match std::str::from_utf8(&output.stdout) {
+    let out: Vec<u8>;
+    if output.status.success() {
+        out = output.stdout
+    } else {
+        out = output.stderr
+    }
+
+    let result = match std::str::from_utf8(&out) {
         Ok(v) => v.to_string(),
         Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
     };
-
-    //HttpResponse::Ok().json(Response { result });
 
     //Recieve program output as result and return that
     web::Json(Response { result })
@@ -64,16 +66,3 @@ fn run_image(image_name: &str) -> Output {
         .output()
         .unwrap();
 }
-
-// fn create_entrypoint(timelimit: i32) {
-//     let folder = "../dockers/py3";
-//     let run_cmd = "python3";
-//     let file = "main.py";
-
-//     let execution_cmd = format!(
-//         "timeout --signal=SIGTERM {}s {} {}\n",
-//         timelimit, run_cmd, file
-//     );
-
-//     let file_content = "#!/usr/bin/env bash\n {}exit$?\n";
-// }
