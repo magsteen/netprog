@@ -1,9 +1,16 @@
 <template>
-  <div>
-    <textarea name="" id="" cols="30" rows="10" v-model="source"></textarea>
-    <button @click="submit">Submit</button>
-    <div id="outputBox">
-      <p id="output">{{ output }}</p>
+  <div id="compiler">
+    <textarea
+      name="input"
+      id="inputbox"
+      cols="30"
+      rows="10"
+      v-model="source"
+    ></textarea>
+    <button @click="submit" id="submitButton">Submit</button>
+    <div id="outputbox">
+      <div class="output">Run result:</div>
+      <div class="output">{{ output }}</div>
     </div>
   </div>
 </template>
@@ -27,4 +34,45 @@ export default {
 };
 </script>
 
-<style scoped></style>
+<style scoped>
+#compiler {
+  width: 1200px;
+  height: 600px;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+#inputbox {
+  width: 400px;
+  height: 400px;
+  margin: 10px;
+}
+
+#submitButton {
+  border: 0px;
+  margin: 10px;
+  background: blue;
+  width: 100px;
+  height: 50px;
+  font-weight: bold;
+  font-size: 150%;
+  color: white;
+}
+
+#outputbox {
+  width: 400px;
+  height: 400px;
+  margin: 10px;
+  background: lightcyan;
+  border-radius: 10px;
+}
+
+.output {
+  overflow: auto;
+  align-content: flex-start;
+  text-align: left;
+  padding: 10px;
+}
+</style>
