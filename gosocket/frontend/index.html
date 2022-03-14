@@ -5,14 +5,19 @@
   <body>
     WebSocket test page
     <script>
-      let ws = new WebSocket('ws://localhost:8080');
-      ws.onmessage = event => alert('Message from server: ' + event.data);
+      let ws = new WebSocket('ws://localhost:8080/');
+      ws.onmessage = (event) => {
+        console.log("MONKE")
+        alert('Message from server: ' + event.data);
+      }
       ws.onopen = () => {
-        ws.send('hello');
-        console.log("monk")
+        ws.send("Hello");
       }
       ws.onclose = () => {
           console.log("Closed now")
+      }
+      ws.onerror = () => {
+        console.log("FML")
       }
     </script>
   </body>

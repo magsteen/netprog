@@ -5,13 +5,15 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"websocket/websocket"
 )
 
 var logger = log.Default()
 
 var port = ":8080"
-var counter = 0
+var counter = -1
+var lock sync.Mutex
 
 func main() {
 	http.HandleFunc("/", httpHandler)
@@ -30,12 +32,12 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Println("Handshake over!")
 
-	websocket.Sockets[counter] = *ws
-	counter++
+	websocket.Sockets[ws.ID] = *ws
 
 	for {
 		if err := ws.Recieve(); err != nil {
-			logger.Fatal(err)
+			logger.Printf("Websocket recieve got: %v", err)
+			break
 		}
 	}
 }
@@ -54,8 +56,10 @@ func newConnection(w http.ResponseWriter, r *http.Request) (*websocket.WebSocket
 	if err = verifyHeaders(r); err != nil {
 		return nil, fmt.Errorf("could not verify necessary websocket headers: %q", err)
 	}
-
-	return &websocket.WebSocket{Conn: conn, Rw: rw, HandshakeHeaders: r.Header}, nil
+	lock.Lock()
+	defer lock.Unlock()
+	counter++
+	return &websocket.WebSocket{ID: counter, Conn: conn, Rw: rw, HandshakeHeaders: r.Header}, nil
 }
 
 func verifyHeaders(r *http.Request) error {
